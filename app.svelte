@@ -5,5 +5,5 @@
 </script>
 
 <button on:click={decrement}>Decrement</button>
-{counter}
+<div>{counter}</div>
 <button on:click={increment}>Increment</button>
