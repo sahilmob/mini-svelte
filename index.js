@@ -3,20 +3,21 @@ import * as acorn from "acorn";
 
 const content = fs.readFileSync("./app.svelte", "utf-8");
 const ast = parse(content);
-const analysis = analyze(ast);
-const js = generate(ast, analysis);
+// const analysis = analyze(ast);
+// const js = generate(ast, analysis);
 
-fs.writeFileSync("./app.js", js, "utf-8");
+fs.writeFileSync("./app.json", JSON.stringify(ast, null, 2), "utf-8");
 
 function parse(content) {
   let i = 0;
   const ast = {};
-  ast.html = parseFragments();
+  ast.html = parseFragments(() => i < content.length);
+  return ast;
 
-  function parseFragments() {
+  function parseFragments(condition) {
     const fragments = [];
 
-    while (i < content.length) {
+    while (condition()) {
       const fragment = parseFragment();
       if (fragment) {
         fragments.push(fragment);
@@ -39,11 +40,76 @@ function parse(content) {
       eat("</script>");
     }
   }
-  function parseElement() {}
-  function parseAttributeList() {}
-  function parseExpression() {}
-  function parseText() {}
-  function parseJavascript() {}
+
+  function parseElement() {
+    if (match("<")) {
+      eat("<");
+      const tagName = readWhileMatching(/[a-z]/);
+      const attributes = parseAttributeList();
+      eat(">");
+
+      const endTag = `</${tagName}>`;
+
+      const element = {
+        type: "Element",
+        name: tagName,
+        attributes,
+        children: parseFragments(() => !match(endTag)),
+      };
+
+      eat(endTag);
+      return element;
+    }
+  }
+  function parseAttributeList() {
+    const attributes = [];
+    skipWhitespace();
+    while (!match(">")) {
+      attributes.push(parseAttribute());
+      skipWhitespace();
+    }
+
+    return attributes;
+  }
+  function parseAttribute() {
+    const name = readWhileMatching(/[^=]/);
+    eat("={");
+    const value = parseJavascript();
+    eat("}");
+
+    return {
+      type: "Attribute",
+      name,
+      value,
+    };
+  }
+  function parseExpression() {
+    if (match("{")) {
+      eat("{");
+      const expression = parseJavascript();
+      eat("}");
+
+      return {
+        type: "Expression",
+        expression,
+      };
+    }
+  }
+  function parseText() {
+    const text = readWhileMatching(/[^<{]/);
+
+    if (text.trim() !== "") {
+      return {
+        type: "Text",
+        value: text,
+      };
+    }
+  }
+  function parseJavascript() {
+    const js = acorn.parseExpressionAt(content, i, { ecmaVersion: 2022 });
+    i = js.end;
+    return js;
+  }
 
   function match(str) {
     return content.slice(i, i + str.length) === str;
@@ -59,11 +125,15 @@ function parse(content) {
 
   function readWhileMatching(regex) {
     let startIndex = i;
-    while (regex.test(content[i])) {
+    while (i < content.length && regex.test(content[i])) {
       i++;
     }
 
     return content.slice(startIndex, i);
+  }
+
+  function skipWhitespace() {
+    readWhileMatching(/[\s\n]/);
   }
 }
 function analysis(ast) {}
