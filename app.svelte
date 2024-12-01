@@ -1,6 +1,7 @@
 <script>
   let counter = 0;
-  let double = 2;
+  $: quadruple = double * 2;
+  $: double = counter * 2;
   const increment = () => {
     counter += 1;
   };
@@ -8,6 +9,7 @@
 </script>
 
 <button on:click={decrement}>Decrement</button>
-<div>{counter}</div>
-<div>{counter * double}</div>
+<div>counter = {counter}</div>
+<div>counter * 2 = {double}</div>
+<div>counter * 4 = {quadruple}</div>
 <button on:click={increment}>Increment</button>

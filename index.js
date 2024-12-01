@@ -144,12 +144,46 @@ function analyze(ast) {
     variables: new Set(),
     willChange: new Set(),
     willUseInTemplate: new Set(),
+    reactiveDeclarations: [],
   };
 
-  const { scope: rootScope, map } = periscopic.analyze(ast.script);
+  const { scope: rootScope, map, globals } = periscopic.analyze(ast.script);
   result.variables = new Set(rootScope.declarations.keys());
   result.rootScope = rootScope;
   result.map = map;
+
+  const toRemove = new Set();
+
+  ast.script.body.forEach((node, index) => {
+    if (node.type === "LabeledStatement" && node.label.name === "$") {
+      const body = node.body;
+      const left = body.expression.left;
+      const right = body.expression.right;
+      const dependencies = [];
+
+      estreewalker.walk(right, {
+        enter: (node) => {
+          if (node.type === "Identifier") {
+            dependencies.push(node.name);
+          }
+        },
+      });
+
+      result.willChange.add(left.name);
+
+      const reactiveDeclaration = {
+        index,
+        node: body,
+        dependencies,
+        assignees: [left.name],
+      };
+
+      result.reactiveDeclarations.push(reactiveDeclaration);
+      toRemove.add(node);
+    }
+  });
+
+  ast.script.body = ast.script.body.filter((node) => !toRemove.has(node));
 
   let currentScope = rootScope;
   estreewalker.walk(ast.script, {
@@ -163,7 +197,10 @@ function analyze(ast) {
           node.type === "UpdateExpression" ? node.argument : node.left
         );
         for (const name of names) {
-          if (currentScope.find_owner(name) === rootScope) {
+          if (
+            currentScope.find_owner(name) === rootScope ||
+            globals.has(name)
+          ) {
             result.willChange.add(name);
           }
         }
@@ -204,6 +241,7 @@ function generate(ast, analysis) {
     create: [],
     update: [],
     destroy: [],
+    reactiveDeclarations: [],
   };
   let counter = 1;
 
@@ -307,13 +345,9 @@ function generate(ast, analysis) {
             type: "SequenceExpression",
             expressions: [
               node,
-              acorn.parseExpressionAt(
-                `lifecycles.update(${JSON.stringify(names)})`,
-                0,
-                {
-                  ecmaVersion: 2022,
-                }
-              ),
+              acorn.parseExpressionAt(`update(${JSON.stringify(names)})`, 0, {
+                ecmaVersion: 2022,
+              }),
             ],
           });
           this.skip();
@@ -325,11 +359,59 @@ function generate(ast, analysis) {
     },
   });
 
+  analysis.reactiveDeclarations.sort((rd1, rd2) => {
+    if (rd1.assignees.some((assignee) => rd2.dependencies.includes(assignee))) {
+      return -1;
+    }
+
+    if (rd2.assignees.some((assignee) => rd1.declarations.includes(assignee))) {
+      return 1;
+    }
+
+    return rd1.index - rd2.index;
+  });
+
+  analysis.reactiveDeclarations.forEach((d) => {
+    code.reactiveDeclarations.push(`
+        if (${JSON.stringify(
+          d.dependencies
+        )}.some(name => collectedChanges.includes(name))){
+          ${escodegen.generate(d.node)}
+          update(${JSON.stringify(d.assignees)})
+        }
+      `);
+    d.assignees.forEach((a) => code.variables.push(a));
+  });
+
   return `
     export default function(){
       ${code.variables.map((v) => `let ${v};`).join("\n")}
+
+      let collectedChanges = [];
+      let updateCalled = false;
+
+      function update(changed) {
+        changed.forEach(c => collectedChanges.push(c))
+
+        if (updateCalled) return;
+        updateCalled = true;
+
+        updateReactiveDeclarations();
+        if (typeof lifecycle !== "undefined") lifecycle.update(collectedChanges);
+        collectedChanges = [];
+        updateCalled = false;
+      };
+
+      function updateReactiveDeclarations() {
+        ${code.reactiveDeclarations.join("\n")}
+      };
+
+     
       ${escodegen.generate(ast.script)}
-      const lifecycles = {
+
+       update(${JSON.stringify(Array.from(analysis.willChange))});
+      
+      var lifecycle = {
         create(target){
           ${code.create.join("\n")};
         },
@@ -341,7 +423,7 @@ function generate(ast, analysis) {
         },
       }
 
-      return lifecycles;
+      return lifecycle;
     }
   `;
 }
