@@ -2,8 +2,7 @@
   let counter = 0;
   let double = 2;
   const increment = () => {
-    counter++;
-    double++;
+    counter += 1;
   };
   const decrement = () => counter--;
 </script>

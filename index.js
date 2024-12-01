@@ -156,10 +156,17 @@ function analyze(ast) {
     enter: (node) => {
       if (map.has(node)) currentScope = map.get(node);
       if (
-        node.type === "UpdateExpression" &&
-        currentScope.find_owner(node.argument.name) === rootScope
+        node.type === "UpdateExpression" ||
+        node.type === "AssignmentExpression"
       ) {
-        result.willChange.add(node.argument.name);
+        const names = periscopic.extract_names(
+          node.type === "UpdateExpression" ? node.argument : node.left
+        );
+        for (const name of names) {
+          if (currentScope.find_owner(name) === rootScope) {
+            result.willChange.add(name);
+          }
+        }
       }
     },
     leave: (node) => {
@@ -282,24 +289,35 @@ function generate(ast, analysis) {
     enter(node) {
       if (map.has(node)) currentScope = map.get(node);
       if (
-        node.type === "UpdateExpression" &&
-        currentScope.find_owner(node.argument.name) === rootScope &&
-        analysis.willUseInTemplate.has(node.argument.name)
+        node.type === "UpdateExpression" ||
+        node.type === "AssignmentExpression"
       ) {
-        this.replace({
-          type: "SequenceExpression",
-          expressions: [
-            node,
-            acorn.parseExpressionAt(
-              `lifecycles.update(['${node.argument.name}'])`,
-              0,
-              {
-                ecmaVersion: 2022,
-              }
-            ),
-          ],
-        });
-        this.skip();
+        const names = periscopic
+          .extract_names(
+            node.type === "UpdateExpression" ? node.argument : node.left
+          )
+          .filter(
+            (name) =>
+              currentScope.find_owner(name) === rootScope &&
+              analysis.willUseInTemplate.has(name)
+          );
+
+        if (names.length > 0) {
+          this.replace({
+            type: "SequenceExpression",
+            expressions: [
+              node,
+              acorn.parseExpressionAt(
+                `lifecycles.update(${JSON.stringify(names)})`,
+                0,
+                {
+                  ecmaVersion: 2022,
+                }
+              ),
+            ],
+          });
+          this.skip();
+        }
       }
     },
     leave(node) {
