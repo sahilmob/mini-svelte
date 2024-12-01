@@ -1,11 +1,14 @@
 import * as fs from "fs";
 import * as acorn from "acorn";
+import * as periscopic from "periscopic";
+import * as estreewalker from "estree-walker";
 
 const content = fs.readFileSync("./app.svelte", "utf-8");
 const ast = parse(content);
-// const analysis = analyze(ast);
+const analysis = analyze(ast);
 // const js = generate(ast, analysis);
 
+console.log(analysis);
 fs.writeFileSync("./app.json", JSON.stringify(ast, null, 2), "utf-8");
 
 function parse(content) {
@@ -136,5 +139,50 @@ function parse(content) {
     readWhileMatching(/[\s\n]/);
   }
 }
-function analysis(ast) {}
+function analyze(ast) {
+  const result = {
+    variables: new Set(),
+    willChange: new Set(),
+    willUseInTemplate: new Set(),
+  };
+
+  const { scope: rootScope, map } = periscopic.analyze(ast.script);
+  result.variables = new Set(rootScope.declarations.keys());
+  result.rootScope = rootScope;
+  result.map = map;
+
+  let currentScope = rootScope;
+  estreewalker.walk(ast.script, {
+    enter: (node) => {
+      if (map.has(node)) currentScope = map.get(node);
+      if (
+        node.type === "UpdateExpression" &&
+        currentScope.find_owner(node.argument.name) === rootScope
+      ) {
+        result.willChange.add(node.argument.name);
+      }
+    },
+    leave: (node) => {
+      if (map.has(node)) currentScope = currentScope.parent;
+    },
+  });
+
+  function traverse(fragment) {
+    switch (fragment.type) {
+      case "Element":
+        fragment.children.forEach(traverse);
+        fragment.attributes.forEach(traverse);
+        break;
+      case "Attribute":
+        result.willUseInTemplate.add(fragment.value.name);
+        break;
+      case "Expression":
+        result.willUseInTemplate.add(fragment.expression.name);
+    }
+  }
+
+  ast.html.forEach(traverse);
+
+  return result;
+}
 function generate(ast, analysis) {}
