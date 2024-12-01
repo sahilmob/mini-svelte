@@ -1,15 +1,15 @@
 import * as fs from "fs";
 import * as acorn from "acorn";
+import * as escodegen from "escodegen";
 import * as periscopic from "periscopic";
 import * as estreewalker from "estree-walker";
 
 const content = fs.readFileSync("./app.svelte", "utf-8");
 const ast = parse(content);
 const analysis = analyze(ast);
-// const js = generate(ast, analysis);
+const js = generate(ast, analysis);
 
-console.log(analysis);
-fs.writeFileSync("./app.json", JSON.stringify(ast, null, 2), "utf-8");
+fs.writeFileSync("./app.js", js, "utf-8");
 
 function parse(content) {
   let i = 0;
@@ -185,4 +185,130 @@ function analyze(ast) {
 
   return result;
 }
-function generate(ast, analysis) {}
+function generate(ast, analysis) {
+  const code = {
+    variables: [],
+    create: [],
+    update: [],
+    destroy: [],
+  };
+  // let ${code.variables.join(",")};
+  let counter = 1;
+
+  function traverse(node, parent) {
+    switch (node.type) {
+      case "Element": {
+        const variableName = `${node.name}_${counter++}`;
+        code.variables.push(variableName);
+        code.create.push(
+          `${variableName} = document.createElement('${node.name}');`
+        );
+        node.attributes.forEach((att) => {
+          traverse(att, variableName);
+        });
+        node.children.forEach((c) => traverse(c, variableName));
+        code.create.push(`${parent}.appendChild(${variableName});`);
+        code.destroy.push(`${parent}.removeChild(${variableName});`);
+        break;
+      }
+      case "Text": {
+        const variableName = `txt_${counter++}`;
+        code.variables.push(variableName);
+        code.create.push(
+          `
+            ${variableName} = document.createTextNode('${node.value}');
+          `
+        );
+        code.create.push(`${parent}.appendChild(${variableName});`);
+        code.destroy.push(`${parent}.removeChild(${variableName});`);
+        break;
+      }
+      case "Attribute": {
+        if (node.name.startsWith("on:")) {
+          const eventName = node.name.slice(3);
+          const eventHandler = node.value.name;
+          code.create.push(
+            `${parent}.addEventListener('${eventName}', ${eventHandler});`
+          );
+          code.destroy.push(
+            `${parent}.removeEventListener('${eventName}', ${eventHandler});`
+          );
+        }
+        break;
+      }
+      case "Expression": {
+        const variableName = `txt_${counter++}`;
+        const expression = node.expression.name;
+        code.variables.push(variableName);
+        code.create.push(`
+            ${variableName} = document.createTextNode(${expression});
+          `);
+        code.create.push(`
+            ${parent}.appendChild(${variableName});
+          `);
+        if (analysis.willChange.has(node.expression.name)) {
+          code.update.push(`
+              if(changed.includes('${expression}')){
+                ${variableName}.data = ${expression};
+              };
+            `);
+        }
+        break;
+      }
+    }
+  }
+
+  ast.html.forEach((f) => traverse(f, "target"));
+
+  const { rootScope, map } = analysis;
+  let currentScope = rootScope;
+
+  estreewalker.walk(ast.script, {
+    enter(node) {
+      if (map.has(node)) currentScope = map.get(node);
+      if (
+        node.type === "UpdateExpression" &&
+        currentScope.find_owner(node.argument.name) === rootScope &&
+        analysis.willUseInTemplate.has(node.argument.name)
+      ) {
+        this.replace({
+          type: "SequenceExpression",
+          expressions: [
+            node,
+            acorn.parseExpressionAt(
+              `lifecycles.update(['${node.argument.name}'])`,
+              0,
+              {
+                ecmaVersion: 2022,
+              }
+            ),
+          ],
+        });
+        this.skip();
+      }
+    },
+    leave(node) {
+      if (map.has(node)) currentScope = currentScope.parent;
+    },
+  });
+
+  return `
+    export default function(){
+      ${code.variables.map((v) => `let ${v};`).join("\n")}
+      ${escodegen.generate(ast.script)}
+      const lifecycles = {
+        create(target){
+          ${code.create.join("\n")};
+        },
+        update(changed){
+          ${code.update.join("\n")};
+        },
+        destroy(target){
+          ${code.destroy.join("\n")};
+        },
+      }
+
+      return lifecycles;
+    }
+  `;
+}
