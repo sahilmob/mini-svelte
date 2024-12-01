@@ -169,15 +169,21 @@ function analyze(ast) {
 
   function traverse(fragment) {
     switch (fragment.type) {
-      case "Element":
+      case "Element": {
         fragment.children.forEach(traverse);
         fragment.attributes.forEach(traverse);
         break;
-      case "Attribute":
+      }
+      case "Attribute": {
         result.willUseInTemplate.add(fragment.value.name);
         break;
-      case "Expression":
-        result.willUseInTemplate.add(fragment.expression.name);
+      }
+      case "Expression": {
+        extractNames(fragment.expression).forEach((n) =>
+          result.willUseInTemplate.add(n)
+        );
+        break;
+      }
     }
   }
 
@@ -192,7 +198,6 @@ function generate(ast, analysis) {
     update: [],
     destroy: [],
   };
-  // let ${code.variables.join(",")};
   let counter = 1;
 
   function traverse(node, parent) {
@@ -238,18 +243,28 @@ function generate(ast, analysis) {
       }
       case "Expression": {
         const variableName = `txt_${counter++}`;
-        const expression = node.expression.name;
+        const expressionStr = escodegen.generate(node.expression);
         code.variables.push(variableName);
         code.create.push(`
-            ${variableName} = document.createTextNode(${expression});
+            ${variableName} = document.createTextNode(${expressionStr});
           `);
         code.create.push(`
             ${parent}.appendChild(${variableName});
           `);
-        if (analysis.willChange.has(node.expression.name)) {
+        const names = extractNames(node.expression);
+        if (names.some((n) => analysis.willChange.has(n))) {
+          const changes = names.filter((v) => analysis.willChange.has(v));
+          let condition = "";
+          if (changes.length > 1) {
+            condition = `${JSON.stringify(
+              changes
+            )}.some(name => changed.includes(name))`;
+          } else {
+            condition = `changed.includes('${changes[0]}')`;
+          }
           code.update.push(`
-              if(changed.includes('${expression}')){
-                ${variableName}.data = ${expression};
+              if(${condition}){
+                ${variableName}.data = ${expressionStr};
               };
             `);
         }
@@ -311,4 +326,20 @@ function generate(ast, analysis) {
       return lifecycles;
     }
   `;
+}
+
+function extractNames(jsNode, result = []) {
+  switch (jsNode.type) {
+    case "Identifier": {
+      result.push(jsNode.name);
+      break;
+    }
+    case "BinaryExpression": {
+      extractNames(jsNode.left, result);
+      extractNames(jsNode.right, result);
+      break;
+    }
+  }
+
+  return result;
 }
