@@ -1,5 +1,5 @@
 <script>
-  let counter = 0;
+  let counter = 1;
   $: quadruple = double * 2;
   $: double = counter * 2;
   const increment = () => {
