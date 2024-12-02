@@ -8,16 +8,19 @@ const compileTarget = "ssr";
 const content = fs.readFileSync("./app.svelte", "utf-8");
 const ast = parse(content);
 const analysis = analyze(ast);
-const js =
-  compileTarget === "ssr"
-    ? generateSSR(ast, analysis)
-    : generate(ast, analysis);
+// const js =
+//   compileTarget === "ssr"
+//     ? generateSSR(ast, analysis)
+//     : generate(ast, analysis);
 
-fs.writeFileSync(
-  compileTarget === "ssr" ? "./ssr.js" : "./app.js",
-  js,
-  "utf-8"
-);
+// fs.writeFileSync(
+//   compileTarget === "ssr" ? "./ssr.js" : "./app.js",
+//   js,
+//   "utf-8"
+// );
+
+fs.writeFileSync("./app.js", generate(ast, analysis), "utf-8");
+fs.writeFileSync("./ssr.js", generateSSR(ast, analysis), "utf-8");
 
 function parse(content) {
   let i = 0;
@@ -421,6 +424,7 @@ function generate(ast, analysis) {
       
       var lifecycle = {
         create(target){
+          const shouldHydrate = target.childNodes.length > 0;
           ${code.create.join("\n")};
         },
         update(changed){
