@@ -262,7 +262,7 @@ function generate(ast, analysis) {
     reactiveDeclarations: [],
   };
   let counter = 1;
-  let hydrationIndex = 1;
+  let hydrationIndex = 0;
   let hydrationParent = "target";
 
   function traverse(node, parent) {
@@ -283,7 +283,7 @@ function generate(ast, analysis) {
         const currentHydrationIndex = hydrationIndex;
 
         hydrationParent = variableName;
-        hydrationIndex = 1;
+        hydrationIndex = 0;
 
         node.children.forEach((c) => traverse(c, variableName));
 
@@ -306,6 +306,7 @@ function generate(ast, analysis) {
           }');
           `
         );
+        hydrationIndex++;
         code.create.push(
           `if (!shouldHydrate) ${parent}.appendChild(${variableName});`
         );
@@ -332,6 +333,7 @@ function generate(ast, analysis) {
         code.create.push(`
             ${variableName} = shouldHydrate ? ${hydrationParent}.childNodes[${hydrationIndex++}] : document.createTextNode(${expressionStr});
           `);
+        hydrationIndex++;
         code.create.push(`
             if(!shouldHydrate) ${parent}.appendChild(${variableName});
           `);
@@ -520,6 +522,7 @@ function generateSSR(ast, analysis) {
       }
       case "Text": {
         addString(node.value);
+        addString("<!---->");
         break;
       }
       case "Attribute": {
@@ -528,6 +531,7 @@ function generateSSR(ast, analysis) {
       }
       case "Expression": {
         addExpression(node.expression);
+        addString("<!---->");
         break;
       }
     }

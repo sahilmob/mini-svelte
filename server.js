@@ -17,12 +17,11 @@ const server = createServer((req, res) => {
     return;
   }
 
+  res.setHeader("Content-Type", "text/html");
   res.write(`
     <html>
         <body>
-            <div id="app">
-                ${appComponent()}
-            </div>
+            <div id="app">${appComponent()}</div>
             <script type="module">
                 import App from "./app.js";
                 App().create(document.getElementById("app"));
