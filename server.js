@@ -26,6 +26,10 @@ const server = createServer((req, res) => {
             <script type="module">
                 import App from "./app.js";
                 App().create(document.getElementById("app"));
+                const ws = new WebSocket('ws://localhost:8080');
+                ws.addEventListener("message", (message)=>{
+                  
+                });
             </script>
         </body>
     </html>
@@ -43,10 +47,5 @@ wss.on("connection", function (ws) {
   wss.on("error", console.error);
 
   ws.on("close", function () {});
-
-  let i = 0;
-
-  setInterval(() => {
-    ws.send(i++);
-  }, 1000);
+  // ws.send('');
 });
