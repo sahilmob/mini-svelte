@@ -4,10 +4,8 @@ import * as escodegen from "escodegen";
 import * as periscopic from "periscopic";
 import * as estreewalker from "estree-walker";
 
-const compileTarget = "ssr";
 const content = fs.readFileSync("./app.svelte", "utf-8");
-const ast = parse(content);
-const analysis = analyze(ast);
+
 // const js =
 //   compileTarget === "ssr"
 //     ? generateSSR(ast, analysis)
@@ -19,8 +17,17 @@ const analysis = analyze(ast);
 //   "utf-8"
 // );
 
-fs.writeFileSync("./app.js", generate(ast, analysis), "utf-8");
-fs.writeFileSync("./ssr.js", generateSSR(ast, analysis), "utf-8");
+fs.writeFileSync("./ssr.js", compile(content, "ssr"), "utf-8");
+fs.writeFileSync("./app.js", compile(content, "dom"), "utf-8");
+
+function compile(content, compileTarget) {
+  const ast = parse(content);
+  const analysis = analyze(ast);
+
+  return compileTarget === "ssr"
+    ? generateSSR(ast, analysis)
+    : generate(ast, analysis);
+}
 
 function parse(content) {
   let i = 0;
@@ -255,6 +262,8 @@ function generate(ast, analysis) {
     reactiveDeclarations: [],
   };
   let counter = 1;
+  let hydrationIndex = 1;
+  let hydrationParent = "target";
 
   function traverse(node, parent) {
     switch (node.type) {
@@ -262,13 +271,28 @@ function generate(ast, analysis) {
         const variableName = `${node.name}_${counter++}`;
         code.variables.push(variableName);
         code.create.push(
-          `${variableName} = document.createElement('${node.name}');`
+          `${variableName} = shouldHydrate ? ${hydrationParent}.childNodes[${hydrationIndex++}] : document.createElement('${
+            node.name
+          }');`
         );
         node.attributes.forEach((att) => {
           traverse(att, variableName);
         });
+
+        const currentHydrationParent = hydrationParent;
+        const currentHydrationIndex = hydrationIndex;
+
+        hydrationParent = variableName;
+        hydrationIndex = 1;
+
         node.children.forEach((c) => traverse(c, variableName));
-        code.create.push(`${parent}.appendChild(${variableName});`);
+
+        hydrationParent = currentHydrationParent;
+        hydrationIndex = currentHydrationIndex;
+
+        code.create.push(
+          `if (!shouldHydrate) ${parent}.appendChild(${variableName});`
+        );
         code.destroy.push(`${parent}.removeChild(${variableName});`);
         break;
       }
@@ -277,10 +301,14 @@ function generate(ast, analysis) {
         code.variables.push(variableName);
         code.create.push(
           `
-            ${variableName} = document.createTextNode('${node.value}');
+            ${variableName} = shouldHydrate ? ${hydrationParent}.childNodes[${hydrationIndex++}] : document.createTextNode('${
+            node.value
+          }');
           `
         );
-        code.create.push(`${parent}.appendChild(${variableName});`);
+        code.create.push(
+          `if (!shouldHydrate) ${parent}.appendChild(${variableName});`
+        );
         code.destroy.push(`${parent}.removeChild(${variableName});`);
         break;
       }
@@ -302,10 +330,10 @@ function generate(ast, analysis) {
         const expressionStr = escodegen.generate(node.expression);
         code.variables.push(variableName);
         code.create.push(`
-            ${variableName} = document.createTextNode(${expressionStr});
+            ${variableName} = shouldHydrate ? ${hydrationParent}.childNodes[${hydrationIndex++}] : document.createTextNode(${expressionStr});
           `);
         code.create.push(`
-            ${parent}.appendChild(${variableName});
+            if(!shouldHydrate) ${parent}.appendChild(${variableName});
           `);
         const names = extractNames(node.expression);
         if (names.some((n) => analysis.willChange.has(n))) {
