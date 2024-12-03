@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { WebSocketServer } from "ws";
 import { createServer } from "node:http";
 
 import appComponent from "./ssr.js";
@@ -33,3 +34,19 @@ const server = createServer((req, res) => {
 });
 
 server.listen(4200);
+
+const wss = new WebSocketServer({
+  port: 8080,
+});
+
+wss.on("connection", function (ws) {
+  wss.on("error", console.error);
+
+  ws.on("close", function () {});
+
+  let i = 0;
+
+  setInterval(() => {
+    ws.send(i++);
+  }, 1000);
+});
