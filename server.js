@@ -28,7 +28,7 @@ const server = createServer((req, res) => {
                 App().create(document.getElementById("app"));
                 const ws = new WebSocket('ws://localhost:8080');
                 ws.addEventListener("message", (message)=>{
-                  
+
                 });
             </script>
         </body>
@@ -39,13 +39,28 @@ const server = createServer((req, res) => {
 
 server.listen(4200);
 
+const webSockets = new Set();
 const wss = new WebSocketServer({
   port: 8080,
 });
 
 wss.on("connection", function (ws) {
+  webSockets.add(ws);
   wss.on("error", console.error);
 
-  ws.on("close", function () {});
-  // ws.send('');
+  ws.on("close", () => {
+    webSockets.delete(ws);
+  });
 });
+
+fs.watchFile(
+  path.join(fileURLToPath(import.meta.url), "../app.svelte"),
+  {
+    interval: 0,
+  },
+  () => {
+    webSockets.forEach((ws) => {
+      ws.send("");
+    });
+  }
+);
