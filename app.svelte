@@ -13,4 +13,4 @@
 <div>counter * 2 = {double}</div>
 <div>counter * 4 = {quadruple}</div>
 
-<button on:click={increment}>Increment</button>
+<button on:click={increment}>Increment A</button>

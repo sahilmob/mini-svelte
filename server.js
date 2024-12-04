@@ -5,9 +5,11 @@ import { WebSocketServer } from "ws";
 import { createServer } from "node:http";
 
 import appComponent from "./ssr.js";
+import { buildClient } from "./index.js";
 
 const server = createServer((req, res) => {
-  if (req.url === "/app.js") {
+  const url = new URL(req.url, "http://localhost");
+  if (url.pathname === "/app.js") {
     const app = fs.readFileSync(
       path.join(fileURLToPath(import.meta.url), "../app.js"),
       "utf-8"
@@ -28,7 +30,12 @@ const server = createServer((req, res) => {
                 App().create(document.getElementById("app"));
                 const ws = new WebSocket('ws://localhost:8080');
                 ws.addEventListener("message", (message)=>{
-
+                    console.log(message);
+                    import("./app.js?t=" + Date.now()).then(_ =>{
+                      const App = _.default;
+                      console.log(App);
+                      App().create(document.getElementById("app"));  
+                    })
                 });
             </script>
         </body>
@@ -60,7 +67,8 @@ fs.watchFile(
   },
   () => {
     webSockets.forEach((ws) => {
-      ws.send("");
+      buildClient();
+      ws.send("new build");
     });
   }
 );

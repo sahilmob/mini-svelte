@@ -4,21 +4,15 @@ import * as escodegen from "escodegen";
 import * as periscopic from "periscopic";
 import * as estreewalker from "estree-walker";
 
-const content = fs.readFileSync("./app.svelte", "utf-8");
+export function buildClient() {
+  const content = fs.readFileSync("./app.svelte", "utf-8");
+  fs.writeFileSync("./app.js", compile(content, "dom"), "utf-8");
+}
 
-// const js =
-//   compileTarget === "ssr"
-//     ? generateSSR(ast, analysis)
-//     : generate(ast, analysis);
+// const content = fs.readFileSync("./app.svelte", "utf-8");
 
-// fs.writeFileSync(
-//   compileTarget === "ssr" ? "./ssr.js" : "./app.js",
-//   js,
-//   "utf-8"
-// );
-
-fs.writeFileSync("./ssr.js", compile(content, "ssr"), "utf-8");
-fs.writeFileSync("./app.js", compile(content, "dom"), "utf-8");
+// fs.writeFileSync("./ssr.js", compile(content, "ssr"), "utf-8");
+// fs.writeFileSync("./app.js", compile(content, "dom"), "utf-8");
 
 function compile(content, compileTarget) {
   const ast = parse(content);
