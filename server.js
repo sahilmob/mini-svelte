@@ -27,14 +27,16 @@ const server = createServer((req, res) => {
             <div id="app">${appComponent()}</div>
             <script type="module">
                 import App from "./app.js";
-                App().create(document.getElementById("app"));
+                let app = App();
+                const container = document.getElementById("app");
+                app.create(container);
                 const ws = new WebSocket('ws://localhost:8080');
                 ws.addEventListener("message", (message)=>{
-                    console.log(message);
                     import("./app.js?t=" + Date.now()).then(_ =>{
                       const App = _.default;
-                      console.log(App);
-                      App().create(document.getElementById("app"), false);  
+                      app.destroy(container);
+                      app = App();
+                      app.create(container, false);  
                     })
                 });
             </script>
