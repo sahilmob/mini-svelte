@@ -5,7 +5,9 @@ import { WebSocketServer } from "ws";
 import { createServer } from "node:http";
 
 import appComponent from "./ssr.js";
-import { buildClient } from "./index.js";
+import { buildClient, buildApp } from "./index.js";
+
+buildApp();
 
 const server = createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");

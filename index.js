@@ -9,10 +9,12 @@ export function buildClient() {
   fs.writeFileSync("./app.js", compile(content, "dom"), "utf-8");
 }
 
-// const content = fs.readFileSync("./app.svelte", "utf-8");
+export function buildApp() {
+  const content = fs.readFileSync("./app.svelte", "utf-8");
 
-// fs.writeFileSync("./ssr.js", compile(content, "ssr"), "utf-8");
-// fs.writeFileSync("./app.js", compile(content, "dom"), "utf-8");
+  fs.writeFileSync("./ssr.js", compile(content, "ssr"), "utf-8");
+  fs.writeFileSync("./app.js", compile(content, "dom"), "utf-8");
+}
 
 function compile(content, compileTarget) {
   const ast = parse(content);
