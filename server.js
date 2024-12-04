@@ -36,8 +36,9 @@ const server = createServer((req, res) => {
                 ws.addEventListener("message", (message)=>{
                     import("./app.js?t=" + Date.now()).then(_ =>{
                       const App = _.default;
+                      const state = app.captureState();
                       app.destroy(container);
-                      app = App();
+                      app = App({restoredState: state});
                       app.create(container, false);  
                     })
                 });

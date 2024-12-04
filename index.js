@@ -390,6 +390,30 @@ function generate(ast, analysis) {
           this.skip();
         }
       }
+      if (
+        node.type === "VariableDeclarator" &&
+        currentScope.find_owner(node.id.name) === rootScope
+      ) {
+        if (node.init && node.init.type !== "ArrowFunctionExpression") {
+          this.replace({
+            type: "VariableDeclarator",
+            id: node.id,
+            init: {
+              type: "LogicalExpression",
+              left: acorn.parseExpressionAt(
+                `restoredState?.${node.id.name}`,
+                0,
+                {
+                  ecmaVersion: 2022,
+                }
+              ),
+              right: node.init,
+              operator: "??",
+            },
+          });
+          this.skip();
+        }
+      }
     },
     leave(node) {
       if (map.has(node)) currentScope = currentScope.parent;
@@ -421,7 +445,7 @@ function generate(ast, analysis) {
   });
 
   return `
-    export default function(){
+    export default function({restoredState} = {}){
       ${code.variables.map((v) => `let ${v};`).join("\n")}
 
       let collectedChanges = [];
@@ -458,6 +482,9 @@ function generate(ast, analysis) {
         destroy(target){
           ${code.destroy.join("\n")};
         },
+        captureState(){
+          return {${Array.from(analysis.variables).join(",")}};
+        }
       }
 
       return lifecycle;
