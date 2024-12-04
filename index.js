@@ -447,8 +447,7 @@ function generate(ast, analysis) {
        update(${JSON.stringify(Array.from(analysis.willChange))});
       
       var lifecycle = {
-        create(target){
-          const shouldHydrate = target.childNodes.length > 0;
+        create(target, shouldHydrate = target.childNodes.length > 0){
           ${code.create.join("\n")};
         },
         update(changed){

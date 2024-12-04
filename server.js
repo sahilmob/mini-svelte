@@ -34,7 +34,7 @@ const server = createServer((req, res) => {
                     import("./app.js?t=" + Date.now()).then(_ =>{
                       const App = _.default;
                       console.log(App);
-                      App().create(document.getElementById("app"));  
+                      App().create(document.getElementById("app"), false);  
                     })
                 });
             </script>
